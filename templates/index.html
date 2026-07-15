@@ -1,0 +1,305 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>秋招信息追踪平台</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div class="header-left">
+        <h1>秋招信息追踪平台</h1>
+        <p class="subtitle">管理你的校招投递，记录面经，追踪进度</p>
+      </div>
+      <div class="header-right">
+        <select id="scraper-source" class="btn btn-ghost btn-sm" style="font-size:14px;padding:4px 8px;">
+          <option value="niuke">牛客网</option>
+          <option value="ncss">国家大学生就业服务平台</option>
+          <option value="jobonline">就业在线</option>
+          <optgroup label="--- 985高校 ---">
+          <option value="uni_pku">北京大学</option>
+          <option value="uni_buaa">北京航空航天大学</option>
+          <option value="uni_bit">北京理工大学</option>
+          <option value="uni_sjtu">上海交通大学</option>
+          <option value="uni_sufe">上海财经大学</option>
+          <option value="uni_fudan">复旦大学</option>
+          <option value="uni_ecnu">华东师范大学</option>
+          <option value="uni_scu">四川大学</option>
+          <option value="uni_sysu">中山大学</option>
+          <option value="uni_uibe">对外经济贸易大学</option>
+          </optgroup>
+          <optgroup label="--- 211/双一流 ---">
+          <option value="uni_swufe">西南财经大学</option>
+          <option value="uni_lzu">兰州大学</option>
+          </optgroup>
+        </select>
+        <button class="btn btn-primary btn-sm" id="btn-scrape">&#128260; 抓取</button>
+        <button class="btn btn-ghost btn-sm" id="btn-export">&#11015; 导出CSV</button>
+        <button class="btn btn-ghost btn-sm" id="btn-logout">&#128682; 退出</button>
+      </div>
+    </header>
+
+    <div class="stats-cards">
+      <div class="stat-card total">
+        <div class="stat-number" id="stat-total">0</div>
+        <div class="stat-label">总投递</div>
+      </div>
+      <div class="stat-card pending">
+        <div class="stat-number" id="stat-pending">0</div>
+        <div class="stat-label">未投递</div>
+      </div>
+      <div class="stat-card interview">
+        <div class="stat-number" id="stat-interview">0</div>
+        <div class="stat-label">面试中</div>
+      </div>
+      <div class="stat-card offer">
+        <div class="stat-number" id="stat-offer">0</div>
+        <div class="stat-label">已拿Offer</div>
+      </div>
+      <div class="stat-card urgent">
+        <div class="stat-number" id="stat-urgent">0</div>
+        <div class="stat-label">即将截止</div>
+      </div>
+    </div>
+
+    <div class="toolbar">
+      <button class="btn btn-primary" id="btn-toggle-form">
+        <span class="icon">+</span> 添加招聘信息
+      </button>
+      <div class="filters">
+        <select id="filter-status">
+          <option value="">全部状态</option>
+          <option value="未投">未投</option>
+          <option value="已投">已投</option>
+          <option value="笔试">笔试</option>
+          <option value="面试">面试</option>
+          <option value="OC">OC</option>
+          <option value="拒">已拒绝</option>
+        </select>
+        <select id="filter-industry">
+          <option value="">全部行业</option>
+          <option value="金融">金融</option>
+          <option value="互联网">互联网</option>
+          <option value="国央企">国央企</option>
+        </select>
+        <select id="filter-city">
+          <option value="">全部城市</option>
+        </select>
+        <input type="text" id="filter-keyword" placeholder="搜索公司/岗位/备注...">
+        <button class="btn btn-secondary" id="btn-filter">筛选</button>
+        <button class="btn btn-ghost" id="btn-reset">重置</button>
+      </div>
+    </div>
+
+    <div class="form-panel" id="form-panel" style="display: none;">
+      <h3>添加招聘信息</h3>
+      <form id="add-form">
+        <div class="form-row">
+          <div class="form-group">
+            <label>公司名 <span class="required">*</span></label>
+            <input type="text" name="company" required placeholder="如：字节跳动">
+          </div>
+          <div class="form-group">
+            <label>岗位 <span class="required">*</span></label>
+            <input type="text" name="position" required placeholder="如：后端开发工程师">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>城市</label>
+            <input type="text" name="city" placeholder="如：北京">
+          </div>
+          <div class="form-group">
+            <label>薪资范围</label>
+            <input type="text" name="salary" placeholder="如：25k-35k">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>状态</label>
+            <select name="status">
+              <option value="未投">未投</option>
+              <option value="已投">已投</option>
+              <option value="笔试">笔试</option>
+              <option value="面试">面试</option>
+              <option value="OC">OC</option>
+              <option value="拒">已拒绝</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>行业</label>
+            <select name="industry">
+              <option value="">请选择</option>
+              <option value="金融">金融</option>
+              <option value="互联网">互联网</option>
+              <option value="国央企">国央企</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>截止日期</label>
+            <input type="date" name="deadline">
+          </div>
+          <div class="form-group">
+            <label>优先级</label>
+            <select name="priority">
+              <option value="5">5 - 最高</option>
+              <option value="4">4 - 高</option>
+              <option value="3" selected>3 - 中</option>
+              <option value="2">2 - 低</option>
+              <option value="1">1 - 最低</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>投递链接</label>
+            <input type="url" name="link" placeholder="https://...">
+          </div>
+          <div class="form-group">
+            <label>数据来源</label>
+            <select name="source">
+              <option value="manual" selected>手动录入</option>
+              <option value="scraper">爬虫导入</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group full-width">
+          <label>备注/面经</label>
+          <textarea name="notes" rows="4" placeholder="记录笔试题目、面试问题、心得体会..."></textarea>
+        </div>
+        <div class="form-actions">
+          <button type="submit" class="btn btn-primary">保存</button>
+          <button type="button" class="btn btn-ghost" id="btn-cancel">取消</button>
+        </div>
+      </form>
+    </div>
+
+    <div class="table-container">
+      <table class="job-table">
+        <thead>
+          <tr>
+            <th>优先级</th>
+            <th>公司</th>
+            <th>岗位</th>
+            <th>城市</th>
+            <th>行业</th>
+            <th>薪资</th>
+            <th>状态</th>
+            <th>截止日期</th>
+            <th>来源</th>
+            <th>操作</th>
+          </tr>
+        </thead>
+        <tbody id="job-table-body">
+          <tr class="empty-row">
+            <td colspan="10" class="empty-message">暂无数据，点击上方"添加招聘信息"开始记录</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="sync-status">
+      <span class="sync-dot"></span>
+      <span id="sync-text">数据实时同步中</span>
+      <span class="sync-time" id="last-sync">刚刚</span>
+    </div>
+  </div>
+
+  <div class="modal" id="edit-modal" style="display: none;">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>编辑招聘信息</h3>
+        <button class="close-btn" id="close-modal">&times;</button>
+      </div>
+      <form id="edit-form">
+        <input type="hidden" name="id">
+        <div class="form-row">
+          <div class="form-group">
+            <label>公司名</label>
+            <input type="text" name="company" required>
+          </div>
+          <div class="form-group">
+            <label>岗位</label>
+            <input type="text" name="position" required>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>城市</label>
+            <input type="text" name="city">
+          </div>
+          <div class="form-group">
+            <label>薪资</label>
+            <input type="text" name="salary">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>状态</label>
+            <select name="status">
+              <option value="未投">未投</option>
+              <option value="已投">已投</option>
+              <option value="笔试">笔试</option>
+              <option value="面试">面试</option>
+              <option value="OC">OC</option>
+              <option value="拒">已拒绝</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>行业</label>
+            <select name="industry">
+              <option value="">请选择</option>
+              <option value="金融">金融</option>
+              <option value="互联网">互联网</option>
+              <option value="国央企">国央企</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>截止日期</label>
+            <input type="date" name="deadline">
+          </div>
+          <div class="form-group">
+            <label>优先级</label>
+            <select name="priority">
+              <option value="5">5 - 最高</option>
+              <option value="4">4 - 高</option>
+              <option value="3">3 - 中</option>
+              <option value="2">2 - 低</option>
+              <option value="1">1 - 最低</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>投递链接</label>
+            <input type="url" name="link">
+          </div>
+          <div class="form-group">
+            <label>数据来源</label>
+            <select name="source">
+              <option value="manual">手动录入</option>
+              <option value="scraper">爬虫导入</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group full-width">
+          <label>备注/面经</label>
+          <textarea name="notes" rows="6"></textarea>
+        </div>
+        <div class="form-actions">
+          <button type="submit" class="btn btn-primary">保存修改</button>
+          <button type="button" class="btn btn-ghost" id="btn-cancel-edit">取消</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>
