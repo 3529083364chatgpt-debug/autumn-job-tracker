@@ -1,4 +1,4 @@
-﻿const API_BASE = '';
+const API_BASE = '';
 let jobs = [];
 let syncInterval = null;
 
@@ -30,6 +30,9 @@ function bindEvents() {
   document.getElementById('btn-export').addEventListener('click', handleExport);
   document.getElementById('btn-logout').addEventListener('click', handleLogout);
   document.getElementById('btn-scrape').addEventListener('click', handleScrape);
+  if (document.getElementById('btn-scrape-all')) {
+    document.getElementById('btn-scrape-all').addEventListener('click', handleScrapeAll);
+  }
 }
 
 function toggleForm() {
@@ -286,32 +289,55 @@ async function handleLogout() {
 // ======== 数据抓取 ========
 async function handleScrape() {
   const source = document.getElementById('scraper-source').value;
+  await runScrape([source]);
+}
+
+async function handleScrapeAll() {
+  await runScrape(['all']);
+}
+
+async function runScrape(sources) {
   const btn = document.getElementById('btn-scrape');
-  const originalText = btn.innerHTML;
-  btn.innerHTML = '抓取中...';
-  btn.disabled = true;
+  const btnAll = document.getElementById('btn-scrape-all');
+  const originalText = btn ? btn.innerHTML : '';
+  const originalAllText = btnAll ? btnAll.innerHTML : '';
+  if (btn) { btn.innerHTML = '抓取中...'; btn.disabled = true; }
+  if (btnAll) { btnAll.innerHTML = '抓取中...'; btnAll.disabled = true; }
+
   try {
     const response = await fetch(API_BASE + '/api/scraper/run', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sources: [source], industries: ['金融', '互联网', '国央企'] })
+      body: JSON.stringify({ sources: sources, industries: ['金融', '互联网', '国央企'] })
     });
     if (response.status === 401) { window.location.href = '/login'; return; }
     const data = await response.json();
     if (data.results && data.results.length > 0) {
-      const result = data.results[0];
-      if (result.status === 'success') {
-        alert('抓取完成：' + result.source + ' 新增 ' + result.added + ' 条');
-        loadJobs(); loadStats(); loadCities();
-      } else {
-        alert('抓取失败：' + (result.message || '未知错误'));
+      let msg = '';
+      let totalAdded = 0;
+      let errors = [];
+      data.results.forEach(r => {
+        if (r.status === 'success') {
+          totalAdded += r.added;
+          msg += r.source + ': +' + r.added + '条\n';
+        } else {
+          errors.push(r.source + ': ' + (r.message || '失败'));
+        }
+      });
+      if (totalAdded > 0) {
+        msg = '共新增 ' + totalAdded + ' 条\n\n' + msg;
       }
+      if (errors.length > 0) {
+        msg += '\n失败渠道:\n' + errors.join('\n');
+      }
+      alert(msg || '没有抓取到新数据');
+      loadJobs(); loadStats(); loadCities();
     }
   } catch (error) {
     alert('抓取失败，请检查网络');
   } finally {
-    btn.innerHTML = originalText;
-    btn.disabled = false;
+    if (btn) { btn.innerHTML = originalText; btn.disabled = false; }
+    if (btnAll) { btnAll.innerHTML = originalAllText; btnAll.disabled = false; }
   }
 }
 
