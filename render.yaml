@@ -1,8 +1,8 @@
-services:
+﻿services:
   - type: web
     name: autumn-job-tracker
     runtime: python
-    buildCommand: PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 pip install -r requirements.txt
+    buildCommand: pip install -r requirements.txt
     startCommand: gunicorn app:app
     envVars:
       - key: APP_PASSWORD
