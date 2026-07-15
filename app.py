@@ -1,4 +1,4 @@
-﻿import sqlite3
+import sqlite3
 import os
 import csv
 import io
@@ -287,13 +287,29 @@ def run_scraper():
     industries = data.get('industries', ['金融', '互联网', '国央企'])
     db = get_db()
 
+    # If sources is ['all'], scrape all available sources
+    if sources == ['all'] or sources == 'all':
+        sources = ['ncss']  # Only NCSS works reliably on Render (US server)
+        # Add working university sources that don't block foreign IPs
+        for uni_key, config in UNIVERSITY_SOURCES.items():
+            if config.get('enabled') and config.get('url'):
+                sources.append(uni_key)
+
     results = []
     for source_name in sources:
         try:
             count = scrape_source(source_name, industries, db)
             results.append({'source': source_name, 'added': count, 'status': 'success'})
         except Exception as e:
-            results.append({'source': source_name, 'added': 0, 'status': 'error', 'message': str(e)})
+            err_msg = str(e)
+            # Provide user-friendly error messages
+            if 'timeout' in err_msg.lower() or 'connection' in err_msg.lower():
+                err_msg = '网络超时：目标网站可能屏蔽了海外IP，建议在本地运行爬虫'
+            elif '403' in err_msg or 'forbidden' in err_msg.lower():
+                err_msg = '访问被拒绝：目标网站屏蔽了当前服务器IP'
+            elif '404' in err_msg:
+                err_msg = '页面不存在：链接可能已过期'
+            results.append({'source': source_name, 'added': 0, 'status': 'error', 'message': err_msg})
 
     return jsonify({'results': results})
 
