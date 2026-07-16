@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>面经 - {{ job.company }} {{ job.position }}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <style>
+    body { background: #f0f2f5; }
+    .interview-container {
+      max-width: 900px;
+      margin: 30px auto;
+      padding: 0 20px;
+    }
+    .interview-header {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border-radius: 16px;
+      padding: 30px;
+      margin-bottom: 24px;
+      box-shadow: 0 4px 20px rgba(102, 126, 234, 0.3);
+    }
+    .interview-header h1 { font-size: 28px; margin-bottom: 8px; }
+    .interview-header .meta { font-size: 14px; opacity: 0.9; display: flex; gap: 16px; flex-wrap: wrap; }
+    .interview-header .meta span { display: inline-flex; align-items: center; gap: 4px; }
+    .interview-back {
+      display: inline-block;
+      margin-bottom: 16px;
+      color: #667eea;
+      text-decoration: none;
+      font-size: 14px;
+    }
+    .interview-section {
+      background: white;
+      border-radius: 14px;
+      padding: 24px;
+      margin-bottom: 20px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.06);
+    }
+    .section-title {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 18px;
+      font-weight: 700;
+      margin-bottom: 16px;
+      padding-bottom: 12px;
+      border-bottom: 2px solid #f0f0f0;
+    }
+    .section-icon {
+      width: 36px; height: 36px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      color: white;
+    }
+    .section-questions .section-icon { background: #4361ee; }
+    .section-pitfalls .section-icon { background: #f72585; }
+    .section-answers .section-icon { background: #06d6a0; }
+    .section-questions .section-title { color: #4361ee; }
+    .section-pitfalls .section-title { color: #f72585; }
+    .section-answers .section-title { color: #06d6a0; }
+    .interview-section textarea {
+      width: 100%;
+      min-height: 180px;
+      padding: 14px;
+      border: 2px solid #e9ecef;
+      border-radius: 10px;
+      font-size: 14px;
+      font-family: inherit;
+      line-height: 1.8;
+      resize: vertical;
+      transition: border-color 0.2s;
+    }
+    .interview-section textarea:focus {
+      outline: none;
+      border-color: #667eea;
+      box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+    }
+    .section-hint {
+      font-size: 12px;
+      color: #aaa;
+      margin-top: 8px;
+    }
+    .save-bar {
+      position: sticky;
+      bottom: 20px;
+      display: flex;
+      justify-content: center;
+      gap: 12px;
+      padding: 16px;
+      margin-top: 24px;
+    }
+    .save-bar button {
+      padding: 12px 32px;
+      border: none;
+      border-radius: 10px;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .btn-save {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+    }
+    .btn-save:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(102, 126, 234, 0.5); }
+    .btn-back {
+      background: white;
+      color: #666;
+      border: 1px solid #ddd;
+    }
+    .btn-back:hover { background: #f8f9fa; }
+    .save-toast {
+      position: fixed;
+      top: 24px;
+      right: 24px;
+      background: #06d6a0;
+      color: white;
+      padding: 12px 24px;
+      border-radius: 10px;
+      font-size: 14px;
+      box-shadow: 0 4px 15px rgba(6, 214, 160, 0.4);
+      opacity: 0;
+      transform: translateY(-20px);
+      transition: all 0.3s;
+      z-index: 9999;
+    }
+    .save-toast.show { opacity: 1; transform: translateY(0); }
+    .status-badge-large {
+      display: inline-block;
+      padding: 4px 14px;
+      border-radius: 20px;
+      font-size: 13px;
+      font-weight: 500;
+      background: rgba(255,255,255,0.2);
+    }
+  </style>
+</head>
+<body>
+  <div class="interview-container">
+    <a href="/" class="interview-back">&larr; 返回列表</a>
+    
+    <div class="interview-header">
+      <h1>{{ job.company }}</h1>
+      <div class="meta">
+        <span>&#128193; {{ job.position }}</span>
+        {% if job.city %}<span>&#128205; {{ job.city }}</span>{% endif %}
+        {% if job.salary %}<span>&#128176; {{ job.salary }}</span>{% endif %}
+        {% if job.industry %}<span>&#127981; {{ job.industry }}</span>{% endif %}
+        <span class="status-badge-large">{{ job.status }}</span>
+      </div>
+    </div>
+
+    <div class="interview-section section-questions">
+      <div class="section-title">
+        <div class="section-icon">Q</div>
+        面试问题
+      </div>
+      <textarea id="questions" placeholder="记录面试中被问到的问题，每行一个&#10;例如：&#10;1. 介绍一下你的项目经历&#10;2. HashMap的底层原理&#10;3. 如何处理高并发场景..."></textarea>
+      <div class="section-hint">记录面试官问的所有问题，方便复盘</div>
+    </div>
+
+    <div class="interview-section section-pitfalls">
+      <div class="section-title">
+        <div class="section-icon">!</div>
+        可能踩的坑
+      </div>
+      <textarea id="pitfalls" placeholder="记录面试中容易答错的点、陷阱题、注意事项&#10;例如：&#10;- 问到薪资期望时不要说太低&#10;- HR面可能会问offer选择优先级&#10;- 笔试算法题注意边界条件..."></textarea>
+      <div class="section-hint">记录容易犯错的点，下次避免</div>
+    </div>
+
+    <div class="interview-section section-answers">
+      <div class="section-title">
+        <div class="section-icon">A</div>
+        参考答案
+      </div>
+      <textarea id="answers" placeholder="记录问题的参考答案、自己的回答总结&#10;可以按问题编号对应作答..."></textarea>
+      <div class="section-hint">完善答案，形成自己的知识库</div>
+    </div>
+
+    <div class="save-bar">
+      <button class="btn-save" onclick="saveInterview()">&#128190; 保存面经</button>
+      <button class="btn-back" onclick="window.location.href='/'">返回列表</button>
+    </div>
+  </div>
+
+  <div class="save-toast" id="toast">已保存</div>
+
+  <script>
+    const JOB_ID = {{ job.id }};
+    
+    // Load existing interview data
+    fetch('/api/jobs/' + JOB_ID + '/interview')
+      .then(r => r.json())
+      .then(data => {
+        document.getElementById('questions').value = data.interview_questions || '';
+        document.getElementById('pitfalls').value = data.interview_pitfalls || '';
+        document.getElementById('answers').value = data.interview_answers || '';
+      });
+
+    function saveInterview() {
+      const data = {
+        interview_questions: document.getElementById('questions').value,
+        interview_pitfalls: document.getElementById('pitfalls').value,
+        interview_answers: document.getElementById('answers').value
+      };
+      fetch('/api/jobs/' + JOB_ID + '/interview', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      })
+      .then(r => r.json())
+      .then(data => {
+        const toast = document.getElementById('toast');
+        toast.classList.add('show');
+        setTimeout(() => toast.classList.remove('show'), 2000);
+      })
+      .catch(err => alert('保存失败'));
+    }
+
+    // Ctrl+S to save
+    document.addEventListener('keydown', function(e) {
+      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        e.preventDefault();
+        saveInterview();
+      }
+    });
+  </script>
+</body>
+</html>
