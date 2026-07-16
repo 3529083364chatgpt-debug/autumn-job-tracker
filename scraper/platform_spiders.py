@@ -177,7 +177,9 @@ def scrape_ncss(db, industries, max_pages=5):
                 full_text = '{0} {1} {2} {3}'.format(company, position, company_type, company_scale)
                 industry = _classify_industry(full_text)
 
-                if industries and industry not in industries:
+                # Skip only if industry is explicitly classified AND doesn't match filter
+                # Unclassified jobs are still saved (industry field will be empty)
+                if industries and industry and industry not in industries:
                     continue
 
                 notes_parts = ['来源：国家大学生就业服务平台']
@@ -338,7 +340,7 @@ def _scrape_niuke_playwright(db, industries):
                         continue
 
                     industry = _classify_niuke_industry(company)
-                    if industries and industry not in industries:
+                    if industries and industry and industry not in industries:
                         continue
 
                     notes_parts = ['来源：牛客网校招日历']
@@ -431,7 +433,7 @@ def _scrape_niuke_requests(db, industries):
             classify_text = '{0} {1} {2}'.format(company, intro_text, location)
             industry = _classify_niuke_industry(classify_text)
 
-            if industries and industry not in industries:
+            if industries and industry and industry not in industries:
                 continue
 
             notes_parts = ['来源：牛客网校招日历']
@@ -601,7 +603,7 @@ def _scrape_niuke_mobile_playwright(db, industries):
                         continue
 
                     industry = _classify_niuke_industry(company)
-                    if industries and industry not in industries:
+                    if industries and industry and industry not in industries:
                         continue
 
                     notes_parts = ['来源：牛客网校招日历(移动端)']
@@ -709,7 +711,7 @@ def _scrape_niuke_mobile_requests(db, industries):
             classify_text = '{0} {1} {2}'.format(company, intro_text, location)
             industry = _classify_niuke_industry(classify_text)
 
-            if industries and industry not in industries:
+            if industries and industry and industry not in industries:
                 continue
 
             notes_parts = ['来源：牛客网校招日历(移动端)']
@@ -745,6 +747,90 @@ def _scrape_niuke_mobile_requests(db, industries):
             continue
 
     print('[NIUKE-M-REQ] 移动端爬取完成，共新增 {0} 条'.format(added))
+    return added
+
+
+# ============================================================
+# 应届生求职网爬虫
+# ============================================================
+
+def scrape_yjszp(db, industries, max_pages=3):
+    """
+    爬取应届生求职网(yjszp.com)职位列表
+    URL: https://www.yjszp.com/ (服务端渲染，无需JS)
+    """
+    from bs4 import BeautifulSoup
+
+    base_url = 'https://www.yjszp.com/'
+    print('[YJSZP] 开始爬取应届生求职网...')
+    added = 0
+
+    try:
+        resp = requests.get(base_url, headers={
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        }, timeout=20)
+        resp.encoding = 'utf-8'
+        soup = BeautifulSoup(resp.text, 'html.parser')
+
+        # Find job links - pattern: /job/info/NUMBER
+        job_links = []
+        for a in soup.find_all('a', href=True):
+            href = a['href']
+            if '/job/info/' in href:
+                title = a.get_text(strip=True)
+                if title and len(title) > 3:
+                    full_url = href if href.startswith('http') else 'https://www.yjszp.com' + href
+                    job_links.append({'title': title, 'url': full_url})
+
+        print(f'[YJSZP] 找到 {len(job_links)} 个职位链接')
+
+        # Parse each job page for details
+        for job_info in job_links[:30]:  # Limit to first 30
+            try:
+                title = job_info['title']
+                link = job_info['url']
+
+                # Extract company/position from title
+                # Title format is usually: " 公司名称 职位名称"
+                parts = title.split()
+                if len(parts) >= 2:
+                    company = parts[0]
+                    position = ' '.join(parts[1:])
+                else:
+                    company = title[:20]
+                    position = title[:40]
+
+                # Industry classification
+                industry = _classify_industry(title)
+
+                # Allow unclassified jobs through
+                if industries and industry and industry not in industries:
+                    continue
+
+                if _job_exists(db, company, position):
+                    continue
+
+                _insert_job(db, {
+                    'company': company,
+                    'position': position,
+                    'city': '',
+                    'salary': '',
+                    'deadline': '',
+                    'link': link,
+                    'notes': '来源：应届生求职网',
+                    'source': 'scraper',
+                    'industry': industry,
+                })
+                added += 1
+
+            except Exception as e:
+                print(f'[YJSZP] 解析单项失败: {e}')
+                continue
+
+    except Exception as e:
+        print(f'[YJSZP] 请求失败: {e}')
+
+    print(f'[YJSZP] 爬取完成，共新增 {added} 条')
     return added
 
 
