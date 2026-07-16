@@ -2,6 +2,8 @@ import sqlite3
 import os
 import csv
 import io
+import threading
+import time
 from datetime import datetime, timedelta
 from functools import wraps
 from flask import Flask, render_template, request, jsonify, g, session, redirect, url_for, Response
@@ -15,6 +17,13 @@ app.secret_key = os.urandom(24)
 APP_PASSWORD = os.environ.get('APP_PASSWORD', 'qiuzhao2026')
 
 DATABASE = os.path.join(os.path.dirname(__file__), 'database.db')
+
+# ======== 爬虫异步状态 ========
+_scrape_status = {
+    'running': False,
+    'results': [],
+    'started_at': '',
+}
 
 # ======== 数据库操作 ========
 
@@ -281,37 +290,64 @@ def export_csv():
 @app.route('/api/scraper/run', methods=['POST'])
 @login_required
 def run_scraper():
-    """手动触发爬虫，返回爬取结果摘要"""
-    data = request.get_json() or {}
-    sources = data.get('sources', ['niuke'])
-    industries = data.get('industries', ['金融', '互联网', '国央企'])
-    db = get_db()
+    """启动后台爬虫任务"""
+    global _scrape_status
+    if _scrape_status['running']:
+        return jsonify({'message': '爬虫正在运行中，请稍候', 'status': 'running'})
 
-    # If sources is ['all'], scrape all available sources
+    data = request.get_json() or {}
+    sources = data.get('sources', ['ncss'])
+    industries = data.get('industries', ['金融', '互联网', '国央企'])
+
+    # If sources is ['all'], use all available
     if sources == ['all'] or sources == 'all':
-        sources = ['ncss']  # Only NCSS works reliably on Render (US server)
-        # Add working university sources that don't block foreign IPs
+        sources = ['ncss']
         for uni_key, config in UNIVERSITY_SOURCES.items():
             if config.get('enabled') and config.get('url'):
                 sources.append(uni_key)
 
-    results = []
+    _scrape_status = {
+        'running': True,
+        'results': [],
+        'started_at': datetime.now().strftime('%H:%M:%S'),
+    }
+
+    thread = threading.Thread(target=_run_scraper_bg, args=(sources, industries))
+    thread.daemon = True
+    thread.start()
+
+    return jsonify({'message': '开始抓取...', 'status': 'started', 'sources': sources})
+
+def _run_scraper_bg(sources, industries):
+    """后台线程执行爬虫"""
+    global _scrape_status
+    db_path = DATABASE
     for source_name in sources:
         try:
+            db = sqlite3.connect(db_path)
             count = scrape_source(source_name, industries, db)
-            results.append({'source': source_name, 'added': count, 'status': 'success'})
+            db.close()
+            _scrape_status['results'].append({
+                'source': source_name, 'added': count, 'status': 'success'
+            })
         except Exception as e:
             err_msg = str(e)
-            # Provide user-friendly error messages
             if 'timeout' in err_msg.lower() or 'connection' in err_msg.lower():
-                err_msg = '网络超时：目标网站可能屏蔽了海外IP，建议在本地运行爬虫'
+                err_msg = '网络超时：目标网站可能屏蔽了海外IP'
             elif '403' in err_msg or 'forbidden' in err_msg.lower():
-                err_msg = '访问被拒绝：目标网站屏蔽了当前服务器IP'
+                err_msg = '访问被拒绝：目标网站屏蔽了当前IP'
             elif '404' in err_msg:
                 err_msg = '页面不存在：链接可能已过期'
-            results.append({'source': source_name, 'added': 0, 'status': 'error', 'message': err_msg})
+            _scrape_status['results'].append({
+                'source': source_name, 'added': 0, 'status': 'error', 'message': err_msg
+            })
+    _scrape_status['running'] = False
 
-    return jsonify({'results': results})
+@app.route('/api/scraper/status', methods=['GET'])
+@login_required
+def get_scraper_status():
+    """查询爬虫进度"""
+    return jsonify(_scrape_status)
 
 # ======== 爬虫模块（占位，后续扩展）========
 
