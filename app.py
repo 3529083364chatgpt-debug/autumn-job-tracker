@@ -40,6 +40,18 @@ def close_db(exception):
     if db is not None:
         db.close()
 
+@app.before_request
+def ensure_db():
+    if not os.path.exists(DATABASE):
+        init_db()
+    else:
+        with app.app_context():
+            db = get_db()
+            try:
+                db.execute('SELECT 1 FROM jobs LIMIT 1')
+            except sqlite3.OperationalError:
+                init_db()
+
 def init_db():
     with app.app_context():
         db = get_db()
