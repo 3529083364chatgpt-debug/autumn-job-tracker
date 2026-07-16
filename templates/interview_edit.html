@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% if note %}编辑面经{% else %}新建面经{% endif %} - {{ job.company }} {{ job.position }}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <style>
+    body { background: #f0f2f5; }
+    .ie-container {
+      max-width: 900px;
+      margin: 30px auto;
+      padding: 0 20px;
+    }
+    .ie-header {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border-radius: 16px;
+      padding: 30px;
+      margin-bottom: 24px;
+      box-shadow: 0 4px 20px rgba(102, 126, 234, 0.3);
+    }
+    .ie-header h1 { font-size: 24px; margin-bottom: 8px; }
+    .ie-header .meta { font-size: 14px; opacity: 0.9; display: flex; gap: 16px; flex-wrap: wrap; }
+    .ie-header .meta span { display: inline-flex; align-items: center; gap: 4px; }
+    .ie-back {
+      display: inline-block;
+      margin-bottom: 16px;
+      color: #667eea;
+      text-decoration: none;
+      font-size: 14px;
+    }
+    .title-section {
+      background: white;
+      border-radius: 14px;
+      padding: 20px 24px;
+      margin-bottom: 20px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.06);
+    }
+    .title-section label {
+      display: block;
+      font-size: 14px;
+      font-weight: 600;
+      color: #555;
+      margin-bottom: 10px;
+    }
+    .title-section input {
+      width: 100%;
+      padding: 12px 16px;
+      border: 2px solid #e9ecef;
+      border-radius: 10px;
+      font-size: 16px;
+      font-family: inherit;
+      transition: border-color 0.2s;
+      box-sizing: border-box;
+    }
+    .title-section input:focus {
+      outline: none;
+      border-color: #667eea;
+      box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+    }
+    .ie-section {
+      background: white;
+      border-radius: 14px;
+      padding: 24px;
+      margin-bottom: 20px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.06);
+    }
+    .section-title {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 18px;
+      font-weight: 700;
+      margin-bottom: 16px;
+      padding-bottom: 12px;
+      border-bottom: 2px solid #f0f0f0;
+    }
+    .section-icon {
+      width: 36px; height: 36px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      color: white;
+    }
+    .section-questions .section-icon { background: #4361ee; }
+    .section-pitfalls .section-icon { background: #f72585; }
+    .section-answers .section-icon { background: #06d6a0; }
+    .section-questions .section-title { color: #4361ee; }
+    .section-pitfalls .section-title { color: #f72585; }
+    .section-answers .section-title { color: #06d6a0; }
+    .ie-section textarea {
+      width: 100%;
+      min-height: 180px;
+      padding: 14px;
+      border: 2px solid #e9ecef;
+      border-radius: 10px;
+      font-size: 14px;
+      font-family: inherit;
+      line-height: 1.8;
+      resize: vertical;
+      transition: border-color 0.2s;
+      box-sizing: border-box;
+    }
+    .ie-section textarea:focus {
+      outline: none;
+      border-color: #667eea;
+      box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+    }
+    .section-hint {
+      font-size: 12px;
+      color: #aaa;
+      margin-top: 8px;
+    }
+    .save-bar {
+      position: sticky;
+      bottom: 20px;
+      display: flex;
+      justify-content: center;
+      gap: 12px;
+      padding: 16px;
+      margin-top: 24px;
+    }
+    .save-bar button {
+      padding: 12px 32px;
+      border: none;
+      border-radius: 10px;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .btn-save {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+    }
+    .btn-save:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(102, 126, 234, 0.5); }
+    .btn-back-list {
+      background: white;
+      color: #666;
+      border: 1px solid #ddd;
+    }
+    .btn-back-list:hover { background: #f8f9fa; }
+    .save-toast {
+      position: fixed;
+      top: 24px;
+      right: 24px;
+      background: #06d6a0;
+      color: white;
+      padding: 12px 24px;
+      border-radius: 10px;
+      font-size: 14px;
+      box-shadow: 0 4px 15px rgba(6, 214, 160, 0.4);
+      opacity: 0;
+      transform: translateY(-20px);
+      transition: all 0.3s;
+      z-index: 9999;
+    }
+    .save-toast.show { opacity: 1; transform: translateY(0); }
+    .page-mode {
+      display: inline-block;
+      padding: 4px 14px;
+      border-radius: 20px;
+      font-size: 13px;
+      font-weight: 500;
+      background: rgba(255,255,255,0.2);
+    }
+  </style>
+</head>
+<body>
+  <div class="ie-container">
+    <a href="/job/{{ job.id }}/interviews" class="ie-back">&larr; 返回面经列表</a>
+
+    <div class="ie-header">
+      <h1>{{ job.company }} {% if note %}- 编辑面经{% else %}- 新建面经{% endif %}</h1>
+      <div class="meta">
+        <span>&#128193; {{ job.position }}</span>
+        {% if job.city %}<span>&#128205; {{ job.city }}</span>{% endif %}
+        {% if job.salary %}<span>&#128176; {{ job.salary }}</span>{% endif %}
+        {% if job.industry %}<span>&#127981; {{ job.industry }}</span>{% endif %}
+        <span class="page-mode">{{ job.status }}</span>
+      </div>
+    </div>
+
+    <div class="title-section">
+      <label for="note-title">面经标题</label>
+      <input type="text" id="note-title" placeholder="例如：一面技术面、HR面、二面算法面..." />
+    </div>
+
+    <div class="ie-section section-questions">
+      <div class="section-title">
+        <div class="section-icon">Q</div>
+        面试问题
+      </div>
+      <textarea id="questions" placeholder="记录面试中被问到的问题，每行一个&#10;例如：&#10;1. 介绍一下你的项目经历&#10;2. HashMap的底层原理&#10;3. 如何处理高并发场景..."></textarea>
+      <div class="section-hint">记录面试官问的所有问题，方便复盘</div>
+    </div>
+
+    <div class="ie-section section-pitfalls">
+      <div class="section-title">
+        <div class="section-icon">!</div>
+        可能踩的坑
+      </div>
+      <textarea id="pitfalls" placeholder="记录面试中容易答错的点、陷阱题、注意事项&#10;例如：&#10;- 问到薪资期望时不要说太低&#10;- HR面可能会问offer选择优先级&#10;- 笔试算法题注意边界条件..."></textarea>
+      <div class="section-hint">记录容易犯错的点，下次避免</div>
+    </div>
+
+    <div class="ie-section section-answers">
+      <div class="section-title">
+        <div class="section-icon">A</div>
+        参考答案
+      </div>
+      <textarea id="answers" placeholder="记录问题的参考答案、自己的回答总结&#10;可以按问题编号对应作答..."></textarea>
+      <div class="section-hint">完善答案，形成自己的知识库</div>
+    </div>
+
+    <div class="save-bar">
+      <button class="btn-save" onclick="saveNote()">&#128190; 保存</button>
+      <button class="btn-back-list" onclick="window.location.href='/job/{{ job.id }}/interviews'">返回列表</button>
+    </div>
+  </div>
+
+  <div class="save-toast" id="toast">已保存</div>
+
+  <script>
+    const JOB_ID = {{ job.id }};
+    const NOTE_ID = {{ note.id if note else 'null' }};
+    const IS_EDIT = NOTE_ID !== null;
+
+    // Load existing data if editing
+    if (IS_EDIT) {
+      document.getElementById('note-title').value = {{ note.title | tojson if note else '""' }};
+      document.getElementById('questions').value = {{ note.questions | tojson if note else '""' }};
+      document.getElementById('pitfalls').value = {{ note.pitfalls | tojson if note else '""' }};
+      document.getElementById('answers').value = {{ note.answers | tojson if note else '""' }};
+    }
+
+    function saveNote() {
+      const title = document.getElementById('note-title').value.trim();
+      if (!title) {
+        alert('请输入面经标题');
+        document.getElementById('note-title').focus();
+        return;
+      }
+
+      const data = {
+        title: title,
+        questions: document.getElementById('questions').value,
+        pitfalls: document.getElementById('pitfalls').value,
+        answers: document.getElementById('answers').value
+      };
+
+      let url, method;
+      if (IS_EDIT) {
+        url = '/api/jobs/' + JOB_ID + '/interviews/' + NOTE_ID;
+        method = 'PUT';
+      } else {
+        url = '/api/jobs/' + JOB_ID + '/interviews';
+        method = 'POST';
+      }
+
+      fetch(url, {
+        method: method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      })
+      .then(r => {
+        if (!r.ok) {
+          return r.json().then(err => { throw new Error(err.error || '保存失败'); });
+        }
+        return r.json();
+      })
+      .then(result => {
+        const toast = document.getElementById('toast');
+        toast.classList.add('show');
+        setTimeout(() => toast.classList.remove('show'), 2000);
+
+        // If creating new, redirect to edit page with the new ID
+        if (!IS_EDIT && result.id) {
+          setTimeout(() => {
+            window.location.href = '/job/' + JOB_ID + '/interviews/' + result.id;
+          }, 500);
+        }
+      })
+      .catch(err => alert(err.message || '保存失败'));
+    }
+
+    // Ctrl+S to save
+    document.addEventListener('keydown', function(e) {
+      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        e.preventDefault();
+        saveNote();
+      }
+    });
+  </script>
+</body>
+</html>

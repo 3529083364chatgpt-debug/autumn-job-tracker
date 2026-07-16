@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>面经列表 - {{ job.company }} {{ job.position }}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <style>
+    body { background: #f0f2f5; }
+    .il-container { max-width: 800px; margin: 30px auto; padding: 0 20px; }
+    .il-header {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white; border-radius: 16px; padding: 28px; margin-bottom: 24px;
+      box-shadow: 0 4px 20px rgba(102, 126, 234, 0.3);
+    }
+    .il-header h1 { font-size: 24px; margin-bottom: 8px; }
+    .il-header .meta { font-size: 14px; opacity: 0.9; display: flex; gap: 16px; flex-wrap: wrap; }
+    .il-back { display: inline-block; margin-bottom: 16px; color: #667eea; text-decoration: none; font-size: 14px; }
+    .il-actions { margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; }
+    .il-actions h2 { font-size: 18px; color: #333; }
+    .il-empty { text-align: center; padding: 60px 20px; color: #aaa; }
+    .il-empty p { font-size: 16px; margin-bottom: 16px; }
+    .note-card {
+      background: white; border-radius: 12px; padding: 20px 24px; margin-bottom: 14px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.06); transition: all 0.2s;
+      border-left: 4px solid #667eea; cursor: pointer; display: flex; justify-content: space-between; align-items: center;
+    }
+    .note-card:hover { transform: translateY(-2px); box-shadow: 0 4px 16px rgba(0,0,0,0.1); }
+    .note-card-info { flex: 1; }
+    .note-card-title { font-size: 16px; font-weight: 600; color: #1a1a2e; margin-bottom: 6px; }
+    .note-card-preview { font-size: 13px; color: #888; max-width: 500px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .note-card-date { font-size: 12px; color: #aaa; margin-top: 6px; }
+    .note-card-actions { display: flex; gap: 8px; margin-left: 16px; }
+    .note-card-actions button {
+      padding: 6px 12px; border: none; border-radius: 6px; font-size: 12px; cursor: pointer; transition: all 0.2s;
+    }
+    .btn-edit { background: #e0e7ff; color: #4361ee; }
+    .btn-edit:hover { background: #c7d2fe; }
+    .btn-del { background: #fee2e2; color: #dc2626; }
+    .btn-del:hover { background: #fecaca; }
+    .btn-create {
+      padding: 10px 20px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white; border: none; border-radius: 10px; font-size: 14px; font-weight: 600;
+      cursor: pointer; box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3); transition: all 0.2s;
+    }
+    .btn-create:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4); }
+    .count-badge {
+      display: inline-block; background: rgba(255,255,255,0.2); padding: 2px 10px; border-radius: 12px; font-size: 13px; margin-left: 8px;
+    }
+  </style>
+</head>
+<body>
+  <div class="il-container">
+    <a href="/" class="il-back">&larr; 返回职位列表</a>
+    <div class="il-header">
+      <h1>{{ job.company }}<span class="count-badge">{{ notes|length }} 篇面经</span></h1>
+      <div class="meta">
+        <span>&#128193; {{ job.position }}</span>
+        {% if job.city %}<span>&#128205; {{ job.city }}</span>{% endif %}
+        {% if job.industry %}<span>&#127981; {{ job.industry }}</span>{% endif %}
+        <span>&#128196; {{ job.status }}</span>
+      </div>
+    </div>
+    <div class="il-actions">
+      <h2>面经记录</h2>
+      <button class="btn-create" onclick="window.location.href='/job/{{ job.id }}/interviews/new'">+ 新建面经</button>
+    </div>
+    {% if not notes %}
+    <div class="il-empty">
+      <p>还没有面经记录</p>
+      <p style="font-size:13px;">点击"新建面经"开始记录面试问题、踩坑经验和参考答案</p>
+    </div>
+    {% endif %}
+    {% for note in notes %}
+    <div class="note-card" onclick="window.location.href='/job/{{ job.id }}/interviews/{{ note.id }}'">
+      <div class="note-card-info">
+        <div class="note-card-title">{{ note.title or '未命名面经' }}</div>
+        {% if note.questions %}
+        <div class="note-card-preview">{{ note.questions.split('
+')[0][:80] }}</div>
+        {% endif %}
+        <div class="note-card-date">更新于 {{ note.updated_at[:16] }}</div>
+      </div>
+      <div class="note-card-actions" onclick="event.stopPropagation()">
+        <button class="btn-edit" onclick="window.location.href='/job/{{ job.id }}/interviews/{{ note.id }}'">编辑</button>
+        <button class="btn-del" onclick="deleteNote({{ note.id }}, this)">删除</button>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  <script>
+    const JOB_ID = {{ job.id }};
+    function deleteNote(noteId, btn) {
+      if (!confirm('确定删除这条面经吗？')) return;
+      fetch('/api/jobs/' + JOB_ID + '/interviews/' + noteId, { method: 'DELETE' })
+        .then(r => r.json())
+        .then(data => { if (data.success) window.location.reload(); })
+        .catch(() => alert('删除失败'));
+    }
+  </script>
+</body>
+</html>

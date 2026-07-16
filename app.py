@@ -51,6 +51,23 @@ def ensure_db():
                 db.execute('SELECT 1 FROM jobs LIMIT 1')
             except sqlite3.OperationalError:
                 init_db()
+            try:
+                db.execute('SELECT 1 FROM interview_notes LIMIT 1')
+            except sqlite3.OperationalError:
+                db.execute('''
+                    CREATE TABLE IF NOT EXISTS interview_notes (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        job_id INTEGER NOT NULL,
+                        title TEXT DEFAULT '',
+                        questions TEXT DEFAULT '',
+                        pitfalls TEXT DEFAULT '',
+                        answers TEXT DEFAULT '',
+                        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                        FOREIGN KEY (job_id) REFERENCES jobs(id) ON DELETE CASCADE
+                    );
+                ''')
+                db.commit()
 
 def init_db():
     with app.app_context():
@@ -87,6 +104,20 @@ def init_db():
         try:
             db.execute('ALTER TABLE jobs ADD COLUMN interview_answers TEXT DEFAULT ""')
         except: pass
+        # Create interview_notes table (new architecture: one-to-many notes per job)
+        db.execute('''
+            CREATE TABLE IF NOT EXISTS interview_notes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                job_id INTEGER NOT NULL,
+                title TEXT DEFAULT '',
+                questions TEXT DEFAULT '',
+                pitfalls TEXT DEFAULT '',
+                answers TEXT DEFAULT '',
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (job_id) REFERENCES jobs(id) ON DELETE CASCADE
+            );
+        ''')
         db.commit()
 
 # ======== 登录验证装饰器 ========
@@ -469,40 +500,82 @@ def export_jobs():
     resp.headers['Content-Disposition'] = 'attachment; filename=jobs_export.json'
     return resp
 
-# ======== 面经页面与API ========
+# ======== 面经页面与API（新版：一对多面经笔记）========
 
 @app.route('/job/<int:job_id>/interview')
 @login_required
 def interview_page(job_id):
+    return redirect(url_for('interview_list_page', job_id=job_id))
+
+@app.route('/job/<int:job_id>/interviews')
+@login_required
+def interview_list_page(job_id):
     db = get_db()
     job = db.execute('SELECT * FROM jobs WHERE id = ?', (job_id,)).fetchone()
     if not job:
         return redirect(url_for('index'))
-    return render_template('interview.html', job=dict(job))
+    notes = db.execute('SELECT * FROM interview_notes WHERE job_id = ? ORDER BY updated_at DESC', (job_id,)).fetchall()
+    return render_template('interview_list.html', job=dict(job), notes=[dict(n) for n in notes])
 
-@app.route('/api/jobs/<int:job_id>/interview', methods=['GET'])
+@app.route('/job/<int:job_id>/interviews/new')
 @login_required
-def get_interview(job_id):
+def new_interview_page(job_id):
     db = get_db()
-    job = db.execute('SELECT interview_questions, interview_pitfalls, interview_answers FROM jobs WHERE id = ?', (job_id,)).fetchone()
+    job = db.execute('SELECT * FROM jobs WHERE id = ?', (job_id,)).fetchone()
     if not job:
-        return jsonify({'error': '记录不存在'}), 404
-    return jsonify(dict(job))
+        return redirect(url_for('index'))
+    return render_template('interview_edit.html', job=dict(job), note=None)
 
-@app.route('/api/jobs/<int:job_id>/interview', methods=['PUT'])
+@app.route('/job/<int:job_id>/interviews/<int:note_id>')
 @login_required
-def update_interview(job_id):
+def edit_interview_page(job_id, note_id):
+    db = get_db()
+    job = db.execute('SELECT * FROM jobs WHERE id = ?', (job_id,)).fetchone()
+    note = db.execute('SELECT * FROM interview_notes WHERE id = ? AND job_id = ?', (note_id, job_id)).fetchone()
+    if not job or not note:
+        return redirect(url_for('index'))
+    return render_template('interview_edit.html', job=dict(job), note=dict(note))
+
+@app.route('/api/jobs/<int:job_id>/interviews', methods=['GET'])
+@login_required
+def get_interviews(job_id):
+    db = get_db()
+    notes = db.execute('SELECT * FROM interview_notes WHERE job_id = ? ORDER BY updated_at DESC', (job_id,)).fetchall()
+    return jsonify([dict(n) for n in notes])
+
+@app.route('/api/jobs/<int:job_id>/interviews', methods=['POST'])
+@login_required
+def create_interview(job_id):
+    data = request.get_json()
+    db = get_db()
+    title = data.get('title', '').strip()
+    if not title:
+        return jsonify({'error': '请输入面经标题'}), 400
+    db.execute('''
+        INSERT INTO interview_notes (job_id, title, questions, pitfalls, answers)
+        VALUES (?, ?, ?, ?, ?)
+    ''', (job_id, title, data.get('questions', ''), data.get('pitfalls', ''), data.get('answers', '')))
+    db.commit()
+    note_id = db.execute('SELECT last_insert_rowid()').fetchone()[0]
+    return jsonify({'success': True, 'id': note_id})
+
+@app.route('/api/jobs/<int:job_id>/interviews/<int:note_id>', methods=['PUT'])
+@login_required
+def update_interview(job_id, note_id):
     data = request.get_json()
     db = get_db()
     db.execute('''
-        UPDATE jobs SET interview_questions = ?, interview_pitfalls = ?, interview_answers = ?
-        WHERE id = ?
-    ''', (
-        data.get('interview_questions', ''),
-        data.get('interview_pitfalls', ''),
-        data.get('interview_answers', ''),
-        job_id
-    ))
+        UPDATE interview_notes SET title = ?, questions = ?, pitfalls = ?, answers = ?, updated_at = CURRENT_TIMESTAMP
+        WHERE id = ? AND job_id = ?
+    ''', (data.get('title', ''), data.get('questions', ''), data.get('pitfalls', ''), data.get('answers', ''), note_id, job_id))
+    db.commit()
+    return jsonify({'success': True})
+
+@app.route('/api/jobs/<int:job_id>/interviews/<int:note_id>', methods=['DELETE'])
+@login_required
+def delete_interview(job_id, note_id):
+    db = get_db()
+    db.execute('DELETE FROM interview_notes WHERE id = ? AND job_id = ?', (note_id, job_id))
     db.commit()
     return jsonify({'success': True})
 

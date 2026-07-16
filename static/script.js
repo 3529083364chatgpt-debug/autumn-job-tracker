@@ -156,7 +156,7 @@ function renderTable() {
       <td>
         <div class="actions">
           <button class="btn btn-secondary btn-sm" onclick="openEditModal(${job.id})">编辑</button>
-          <button class="btn btn-secondary btn-sm" onclick="window.open('/job/${job.id}/interview', '_blank')">面经</button>
+          <button class="btn btn-secondary btn-sm" onclick="window.open('/job/${job.id}/interviews', '_self')">面经</button>
           <button class="btn btn-danger btn-sm" onclick="deleteJob(${job.id})">删除</button>
         </div>
       </td>
