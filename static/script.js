@@ -289,14 +289,14 @@ async function handleLogout() {
 // ======== 数据抓取 ========
 async function handleScrape() {
   const source = document.getElementById('scraper-source').value;
-  await runScrape([source]);
+  await startScrape([source]);
 }
 
 async function handleScrapeAll() {
-  await runScrape(['all']);
+  await startScrape(['all']);
 }
 
-async function runScrape(sources) {
+async function startScrape(sources) {
   const btn = document.getElementById('btn-scrape');
   const btnAll = document.getElementById('btn-scrape-all');
   const originalText = btn ? btn.innerHTML : '';
@@ -305,6 +305,7 @@ async function runScrape(sources) {
   if (btnAll) { btnAll.innerHTML = '抓取中...'; btnAll.disabled = true; }
 
   try {
+    // Start background scraping
     const response = await fetch(API_BASE + '/api/scraper/run', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -312,33 +313,66 @@ async function runScrape(sources) {
     });
     if (response.status === 401) { window.location.href = '/login'; return; }
     const data = await response.json();
-    if (data.results && data.results.length > 0) {
-      let msg = '';
-      let totalAdded = 0;
-      let errors = [];
-      data.results.forEach(r => {
-        if (r.status === 'success') {
-          totalAdded += r.added;
-          msg += r.source + ': +' + r.added + '条\n';
-        } else {
-          errors.push(r.source + ': ' + (r.message || '失败'));
-        }
-      });
-      if (totalAdded > 0) {
-        msg = '共新增 ' + totalAdded + ' 条\n\n' + msg;
-      }
-      if (errors.length > 0) {
-        msg += '\n失败渠道:\n' + errors.join('\n');
-      }
-      alert(msg || '没有抓取到新数据');
-      loadJobs(); loadStats(); loadCities();
+
+    if (data.status === 'running') {
+      alert('爬虫正在运行中，请稍候');
+      return;
+    }
+
+    if (data.status === 'started') {
+      // Poll for status
+      pollScrapeStatus(btn, originalText, btnAll, originalAllText);
     }
   } catch (error) {
-    alert('抓取失败，请检查网络');
-  } finally {
+    alert('请求失败，请检查网络');
     if (btn) { btn.innerHTML = originalText; btn.disabled = false; }
     if (btnAll) { btnAll.innerHTML = originalAllText; btnAll.disabled = false; }
   }
+}
+
+async function pollScrapeStatus(btn, originalText, btnAll, originalAllText) {
+  const pollInterval = setInterval(async function() {
+    try {
+      const response = await fetch(API_BASE + '/api/scraper/status');
+      if (!response.ok) return;
+      const status = await response.json();
+
+      if (!status.running) {
+        clearInterval(pollInterval);
+        if (btn) { btn.innerHTML = originalText; btn.disabled = false; }
+        if (btnAll) { btnAll.innerHTML = originalAllText; btnAll.disabled = false; }
+
+        let msg = '';
+        let totalAdded = 0;
+        let errors = [];
+        status.results.forEach(function(r) {
+          if (r.status === 'success') {
+            totalAdded += r.added;
+          } else {
+            errors.push(r.source + ': ' + (r.message || '失败'));
+          }
+        });
+
+        if (totalAdded > 0) {
+          msg = '抓取完成！共新增 ' + totalAdded + ' 条职位';
+          status.results.forEach(function(r) {
+            if (r.status === 'success') {
+              msg += '\n' + r.source + ': +' + r.added + '条';
+            }
+          });
+        } else {
+          msg = '没有抓取到新数据';
+        }
+        if (errors.length > 0) {
+          msg += '\n\n以下渠道失败:\n' + errors.join('\n');
+        }
+        alert(msg);
+        loadJobs(); loadStats(); loadCities();
+      }
+    } catch (e) {
+      // ignore poll errors, keep trying
+    }
+  }, 3000); // poll every 3 seconds
 }
 
 // ======== 自动同步 ========
