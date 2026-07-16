@@ -83,48 +83,94 @@ def scrape_all():
     return jobs, results
 
 
+def _create_session():
+    import time as _time
+    s = requests.Session()
+    print('    唤醒服务器...')
+    for attempt in range(3):
+        try:
+            r = s.get(PLATFORM_URL, timeout=20)
+            if r.status_code == 200:
+                break
+        except:
+            pass
+        print(f'    重试唤醒 ({attempt+1}/3)...')
+        _time.sleep(5)
+    try:
+        r = s.post(PLATFORM_URL + '/api/login', json={'password': PLATFORM_PASSWORD}, timeout=20)
+        if r.status_code == 200 and r.json().get('success'):
+            print('    登录成功')
+            return s
+    except:
+        pass
+    print('    登录失败!')
+    return None
+
+
+def _upload_via_import(s, jobs):
+    upload_data = json.dumps({'jobs': jobs}, ensure_ascii=False)
+    r = s.post(PLATFORM_URL + '/api/jobs/import',
+                files={'file': ('scraped_data.json', upload_data, 'application/json')},
+                timeout=60)
+    if r.status_code == 200:
+        try:
+            result = r.json()
+            if result.get('success'):
+                return result
+        except:
+            pass
+    return None
+
+
+def _upload_via_batch(s, jobs, batch_size=20):
+    added = 0
+    skipped = 0
+    total = len(jobs)
+    for i, job in enumerate(jobs):
+        company = job.get('company', '').strip()
+        position = job.get('position', '').strip()
+        if not company or not position:
+            skipped += 1
+            continue
+        try:
+            r = s.post(PLATFORM_URL + '/api/jobs', json=job, timeout=15)
+            if r.status_code == 201:
+                added += 1
+            elif r.status_code == 401:
+                print('    认证过期，停止上传')
+                break
+            else:
+                skipped += 1
+        except:
+            skipped += 1
+        if (i + 1) % batch_size == 0:
+            print(f'    进度: {i+1}/{total} (新增 {added}, 跳过 {skipped})')
+    return {'added': added, 'skipped': skipped, 'total': total}
+
+
 def upload_to_platform(jobs):
     """上传到线上平台"""
     print(f'\n>>> 正在上传到平台: {PLATFORM_URL}')
     try:
-        s = requests.Session()
-
-        # Wake up the server (Render free tier sleeps)
-        print('    唤醒服务器...')
-        try:
-            s.get(PLATFORM_URL, timeout=15)
-        except:
-            pass
-
-        # Login
-        r = s.post(PLATFORM_URL + '/api/login', json={'password': PLATFORM_PASSWORD}, timeout=15)
-        if r.status_code != 200 or not r.json().get('success'):
-            print('    登录失败!')
+        s = _create_session()
+        if not s:
             return False
-        print('    登录成功')
-
-        # Upload
-        upload_data = json.dumps({'jobs': jobs}, ensure_ascii=False)
-        r = s.post(PLATFORM_URL + '/api/jobs/import',
-                    files={'file': ('scraped_data.json', upload_data, 'application/json')},
-                    timeout=30)
-        if r.status_code == 401:
-            print('    认证失败')
-            return False
-
-        result = r.json()
-        if result.get('success'):
+        print('    尝试文件导入...')
+        result = _upload_via_import(s, jobs)
+        if result:
             print(f'    上传成功! 新增 {result["added"]} 条, 跳过重复 {result["skipped"]} 条')
             return True
-        else:
-            print(f'    上传失败: {result.get("error", "未知错误")}')
-            return False
+        print('    文件导入失败，切换为逐条上传...')
+        result = _upload_via_batch(s, jobs)
+        print(f'    上传完成! 新增 {result["added"]} 条, 跳过 {result["skipped"]} 条')
+        return result['added'] > 0
     except requests.exceptions.Timeout:
         print('    上传超时，服务器可能还在启动中，请稍后重试')
         return False
     except Exception as e:
         print(f'    上传失败: {e}')
         return False
+
 
 
 def main():
