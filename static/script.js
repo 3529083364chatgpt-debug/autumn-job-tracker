@@ -33,6 +33,12 @@ function bindEvents() {
   if (document.getElementById('btn-scrape-all')) {
     document.getElementById('btn-scrape-all').addEventListener('click', handleScrapeAll);
   }
+  if (document.getElementById('btn-import')) {
+    document.getElementById('btn-import').addEventListener('click', handleImport);
+  }
+  if (document.getElementById('btn-export-json')) {
+    document.getElementById('btn-export-json').addEventListener('click', handleExport);
+  }
 }
 
 function toggleForm() {
@@ -373,6 +379,36 @@ async function pollScrapeStatus(btn, originalText, btnAll, originalAllText) {
       // ignore poll errors, keep trying
     }
   }, 3000); // poll every 3 seconds
+}
+
+
+// ======== 导入/导出 ========
+function handleImport() {
+  var input = document.createElement('input');
+  input.type = 'file';
+  input.accept = '.json';
+  input.onchange = function(e) {
+    var file = e.target.files[0];
+    if (!file) return;
+    var formData = new FormData();
+    formData.append('file', file);
+    fetch(API_BASE + '/api/jobs/import', { method: 'POST', body: formData })
+      .then(function(r) {
+        if (r.status === 401) { window.location.href = '/login'; return; }
+        return r.json();
+      })
+      .then(function(data) {
+        if (data.error) { alert('导入失败: ' + data.error); return; }
+        alert('导入成功！新增 ' + data.added + ' 条，跳过重复 ' + data.skipped + ' 条');
+        loadJobs(); loadStats(); loadCities();
+      })
+      .catch(function() { alert('导入请求失败'); });
+  };
+  input.click();
+}
+
+function handleExport() {
+  window.location.href = API_BASE + '/api/jobs/export';
 }
 
 // ======== 自动同步 ========

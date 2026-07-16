@@ -1,6 +1,7 @@
 import sqlite3
 import os
 import csv
+import json
 import io
 import threading
 import time
@@ -348,6 +349,82 @@ def _run_scraper_bg(sources, industries):
 def get_scraper_status():
     """查询爬虫进度"""
     return jsonify(_scrape_status)
+
+
+@app.route('/api/jobs/import', methods=['POST'])
+@login_required
+def import_jobs():
+    """导入JSON格式的职位数据"""
+    if 'file' not in request.files:
+        return jsonify({'error': '请选择文件'}), 400
+
+    file = request.files['file']
+    if not file.filename.endswith('.json'):
+        return jsonify({'error': '仅支持JSON文件'}), 400
+
+    try:
+        data = json.load(file)
+    except:
+        return jsonify({'error': 'JSON格式错误'}), 400
+
+    jobs = data.get('jobs', [])
+    if not jobs:
+        return jsonify({'error': '文件中没有职位数据'}), 400
+
+    db = get_db()
+    added = 0
+    for job in jobs:
+        company = job.get('company', '').strip()
+        position = job.get('position', '').strip()
+        if not company or not position:
+            continue
+
+        # Dedup
+        existing = db.execute('SELECT 1 FROM jobs WHERE company = ? AND position = ? LIMIT 1', (company, position)).fetchone()
+        if existing:
+            continue
+
+        db.execute('''
+            INSERT INTO jobs (company, position, city, salary, status, deadline, link, notes, priority, source, industry, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (
+            company,
+            position,
+            job.get('city', ''),
+            job.get('salary', ''),
+            job.get('status', '未投'),
+            job.get('deadline', ''),
+            job.get('link', ''),
+            job.get('notes', ''),
+            job.get('priority', 3),
+            job.get('source', 'import'),
+            job.get('industry', ''),
+            datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        ))
+        added += 1
+
+    db.commit()
+    return jsonify({'success': True, 'added': added, 'total': len(jobs), 'skipped': len(jobs) - added})
+
+
+@app.route('/api/jobs/export', methods=['GET'])
+@login_required
+def export_jobs():
+    """导出所有职位为JSON"""
+    db = get_db()
+    rows = db.execute('SELECT company, position, city, salary, status, deadline, link, notes, priority, source, industry FROM jobs').fetchall()
+    jobs = []
+    for row in rows:
+        jobs.append({
+            'company': row[0], 'position': row[1], 'city': row[2],
+            'salary': row[3], 'status': row[4], 'deadline': row[5],
+            'link': row[6], 'notes': row[7], 'priority': row[8],
+            'source': row[9], 'industry': row[10],
+        })
+    output = {'exported_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S'), 'total': len(jobs), 'jobs': jobs}
+    resp = jsonify(output)
+    resp.headers['Content-Disposition'] = 'attachment; filename=jobs_export.json'
+    return resp
 
 # ======== 爬虫模块（占位，后续扩展）========
 
