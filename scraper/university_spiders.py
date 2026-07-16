@@ -613,3 +613,35 @@ def scrape_sysu(db, industries, config):
 
     print(f'[SYSU] 爬取完成，新增 {added} 条')
     return added
+
+# ============================================================
+# 通用调度函数 - 根据 key 自动路由到对应的爬虫
+# ============================================================
+
+def scrape_university(key, industries, db):
+    from scraper.config import UNIVERSITY_SOURCES
+    config = UNIVERSITY_SOURCES.get(key, {})
+
+    UNI_SCRAPERS = {
+        'uni_swufe': ('swufe', scrape_swufe),
+        'uni_scu': ('scu', scrape_scu),
+        'uni_lzu': ('lzu', scrape_lzu),
+        'uni_pku': ('pku', scrape_wanxiao),
+        'uni_buaa': ('buaa', scrape_wanxiao),
+        'uni_bit': ('bit', scrape_wanxiao),
+        'uni_sjtu': ('sjtu', scrape_yijy),
+        'uni_sufe': ('sufe', scrape_yijy),
+        'uni_uibe': ('uibe', scrape_uibe),
+        'uni_sysu': ('sysu', scrape_sysu),
+    }
+
+    if key not in UNI_SCRAPERS:
+        name = config.get('name', key)
+        print(f'    {name}: 尚未实现具体解析逻辑')
+        return 0
+
+    uni_type, scraper_fn = UNI_SCRAPERS[key]
+    if uni_type in ('pku', 'buaa', 'bit'):
+        return scraper_fn(db, industries, config, uni_type)
+    else:
+        return scraper_fn(db, industries, config)
