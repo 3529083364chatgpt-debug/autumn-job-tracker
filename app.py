@@ -372,6 +372,9 @@ def scrape_source(source_name, industries, db=None):
     elif source_name == 'jobonline':
         from scraper.platform_spiders import scrape_jobonline
         return scrape_jobonline(db, industries)
+    elif source_name == 'yjszp':
+        from scraper.platform_spiders import scrape_yjszp
+        return scrape_yjszp(db, industries)
     elif source_name.startswith('uni_'):
         return scrape_university(source_name, industries, db)
     else:
