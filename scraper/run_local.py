@@ -13,7 +13,10 @@ from datetime import datetime
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from scraper.platform_spiders import scrape_ncss, scrape_niuke, scrape_yjszp
-from scraper.university_spiders import scrape_university
+from scraper.university_spiders import (
+    scrape_swufe, scrape_scu, scrape_lzu, scrape_wanxiao,
+    scrape_yijy, scrape_uibe, scrape_sysu
+)
 from scraper.config import UNIVERSITY_SOURCES
 
 def main():
@@ -70,6 +73,19 @@ def main():
         print(f'应届生求职网 失败: {e}')
 
     # University sources
+    UNI_SCRAPERS = {
+        'uni_swufe': ('swufe', scrape_swufe),
+        'uni_scu': ('scu', scrape_scu),
+        'uni_lzu': ('lzu', scrape_lzu),
+        'uni_pku': ('pku', scrape_wanxiao),
+        'uni_buaa': ('buaa', scrape_wanxiao),
+        'uni_bit': ('bit', scrape_wanxiao),
+        'uni_sjtu': ('sjtu', scrape_yijy),
+        'uni_sufe': ('sufe', scrape_yijy),
+        'uni_uibe': ('uibe', scrape_uibe),
+        'uni_sysu': ('sysu', scrape_sysu),
+    }
+
     for key, config in UNIVERSITY_SOURCES.items():
         if not config.get('enabled'):
             continue
@@ -79,7 +95,15 @@ def main():
         print(f'正在爬取: {name}')
         print('='*50)
         try:
-            count = scrape_university(key, industries, db)
+            if key in UNI_SCRAPERS:
+                uni_type, scraper_fn = UNI_SCRAPERS[key]
+                if uni_type in ('pku', 'buaa', 'bit'):
+                    count = scraper_fn(db, industries, config, uni_type)
+                else:
+                    count = scraper_fn(db, industries, config)
+            else:
+                count = 0
+                print(f'{name}: 尚未实现具体解析逻辑')
             results.append({'source': name, 'added': count, 'status': 'success'})
         except Exception as e:
             results.append({'source': name, 'added': 0, 'status': 'error', 'message': str(e)})
