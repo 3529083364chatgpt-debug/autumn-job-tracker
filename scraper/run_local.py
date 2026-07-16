@@ -1,4 +1,4 @@
-﻿"""
+"""
 一键爬取并上传到平台
 用法: python -m scraper.run_local
 或者双击: 一键抓取.bat
@@ -84,6 +84,7 @@ def scrape_all():
 
 
 def _create_session():
+    """创建登录会话，带重试"""
     import time as _time
     s = requests.Session()
     print('    唤醒服务器...')
@@ -96,6 +97,7 @@ def _create_session():
             pass
         print(f'    重试唤醒 ({attempt+1}/3)...')
         _time.sleep(5)
+
     try:
         r = s.post(PLATFORM_URL + '/api/login', json={'password': PLATFORM_PASSWORD}, timeout=20)
         if r.status_code == 200 and r.json().get('success'):
@@ -108,6 +110,7 @@ def _create_session():
 
 
 def _upload_via_import(s, jobs):
+    """通过文件导入接口上传"""
     upload_data = json.dumps({'jobs': jobs}, ensure_ascii=False)
     r = s.post(PLATFORM_URL + '/api/jobs/import',
                 files={'file': ('scraped_data.json', upload_data, 'application/json')},
@@ -123,6 +126,7 @@ def _upload_via_import(s, jobs):
 
 
 def _upload_via_batch(s, jobs, batch_size=20):
+    """通过逐条创建接口上传（回退方案）"""
     added = 0
     skipped = 0
     total = len(jobs)
@@ -155,22 +159,26 @@ def upload_to_platform(jobs):
         s = _create_session()
         if not s:
             return False
+
+        # 方式1: 文件导入接口
         print('    尝试文件导入...')
         result = _upload_via_import(s, jobs)
         if result:
             print(f'    上传成功! 新增 {result["added"]} 条, 跳过重复 {result["skipped"]} 条')
             return True
+
+        # 方式2: 逐条创建（回退）
         print('    文件导入失败，切换为逐条上传...')
         result = _upload_via_batch(s, jobs)
         print(f'    上传完成! 新增 {result["added"]} 条, 跳过 {result["skipped"]} 条')
         return result['added'] > 0
+
     except requests.exceptions.Timeout:
         print('    上传超时，服务器可能还在启动中，请稍后重试')
         return False
     except Exception as e:
         print(f'    上传失败: {e}')
         return False
-
 
 
 def main():
@@ -209,7 +217,10 @@ def main():
         print('  你可以手动导入 scraped_data.json 到平台')
     print('=' * 55)
 
-    input('\n按回车键退出...')
+    try:
+        input('\n按回车键退出...')
+    except EOFError:
+        pass
 
 
 if __name__ == '__main__':
