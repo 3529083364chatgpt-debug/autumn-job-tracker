@@ -77,6 +77,17 @@ def init_db():
             CREATE INDEX IF NOT EXISTS idx_industry ON jobs(industry);
         ''')
         db.commit()
+        # After creating the table, add interview columns if they don't exist
+        try:
+            db.execute('ALTER TABLE jobs ADD COLUMN interview_questions TEXT DEFAULT ""')
+        except: pass
+        try:
+            db.execute('ALTER TABLE jobs ADD COLUMN interview_pitfalls TEXT DEFAULT ""')
+        except: pass
+        try:
+            db.execute('ALTER TABLE jobs ADD COLUMN interview_answers TEXT DEFAULT ""')
+        except: pass
+        db.commit()
 
 # ======== 登录验证装饰器 ========
 
@@ -131,33 +142,53 @@ def get_jobs():
     source = request.args.get('source', '')
     sort_by = request.args.get('sort_by', 'created_at')
     sort_order = request.args.get('sort_order', 'DESC')
+    page = int(request.args.get('page', '1'))
+    per_page = int(request.args.get('per_page', '50'))
 
     query = 'SELECT * FROM jobs WHERE 1=1'
+    count_query = 'SELECT COUNT(*) as total FROM jobs WHERE 1=1'
     params = []
 
     if status:
         query += ' AND status = ?'
+        count_query += ' AND status = ?'
         params.append(status)
     if city:
         query += ' AND city LIKE ?'
+        count_query += ' AND city LIKE ?'
         params.append(f'%{city}%')
     if keyword:
         query += ' AND (company LIKE ? OR position LIKE ? OR notes LIKE ?)'
+        count_query += ' AND (company LIKE ? OR position LIKE ? OR notes LIKE ?)'
         params.extend([f'%{keyword}%', f'%{keyword}%', f'%{keyword}%'])
     if industry:
         query += ' AND industry = ?'
+        count_query += ' AND industry = ?'
         params.append(industry)
     if source:
         query += ' AND source = ?'
+        count_query += ' AND source = ?'
         params.append(source)
+
+    total = db.execute(count_query, params).fetchone()['total']
+    total_pages = max(1, (total + per_page - 1) // per_page)
 
     allowed_sort = ['created_at', 'deadline', 'priority', 'company']
     if sort_by in allowed_sort:
         query += f' ORDER BY {sort_by}'
         query += ' ASC' if sort_order.upper() == 'ASC' else ' DESC'
 
+    offset = (page - 1) * per_page
+    query += f' LIMIT {per_page} OFFSET {offset}'
+
     jobs = db.execute(query, params).fetchall()
-    return jsonify([dict(job) for job in jobs])
+    return jsonify({
+        'jobs': [dict(job) for job in jobs],
+        'total': total,
+        'page': page,
+        'per_page': per_page,
+        'total_pages': total_pages
+    })
 
 @app.route('/api/jobs', methods=['POST'])
 @login_required
@@ -437,6 +468,43 @@ def export_jobs():
     resp = jsonify(output)
     resp.headers['Content-Disposition'] = 'attachment; filename=jobs_export.json'
     return resp
+
+# ======== 面经页面与API ========
+
+@app.route('/job/<int:job_id>/interview')
+@login_required
+def interview_page(job_id):
+    db = get_db()
+    job = db.execute('SELECT * FROM jobs WHERE id = ?', (job_id,)).fetchone()
+    if not job:
+        return redirect(url_for('index'))
+    return render_template('interview.html', job=dict(job))
+
+@app.route('/api/jobs/<int:job_id>/interview', methods=['GET'])
+@login_required
+def get_interview(job_id):
+    db = get_db()
+    job = db.execute('SELECT interview_questions, interview_pitfalls, interview_answers FROM jobs WHERE id = ?', (job_id,)).fetchone()
+    if not job:
+        return jsonify({'error': '记录不存在'}), 404
+    return jsonify(dict(job))
+
+@app.route('/api/jobs/<int:job_id>/interview', methods=['PUT'])
+@login_required
+def update_interview(job_id):
+    data = request.get_json()
+    db = get_db()
+    db.execute('''
+        UPDATE jobs SET interview_questions = ?, interview_pitfalls = ?, interview_answers = ?
+        WHERE id = ?
+    ''', (
+        data.get('interview_questions', ''),
+        data.get('interview_pitfalls', ''),
+        data.get('interview_answers', ''),
+        job_id
+    ))
+    db.commit()
+    return jsonify({'success': True})
 
 # ======== 爬虫模块（占位，后续扩展）========
 
