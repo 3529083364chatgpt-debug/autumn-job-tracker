@@ -1,5 +1,8 @@
 const API_BASE = '';
 let jobs = [];
+let currentPage = 1;
+let totalPages = 1;
+let totalJobs = 0;
 let syncInterval = null;
 
 // ======== 初始化 ========
@@ -65,6 +68,8 @@ async function loadJobs() {
     if (city) params.append('city', city);
     if (industry) params.append('industry', industry);
     if (keyword) params.append('keyword', keyword);
+    params.append('page', currentPage);
+    params.append('per_page', 50);
 
     const response = await fetch(API_BASE + '/api/jobs?' + params.toString());
     if (response.status === 401) {
@@ -72,8 +77,12 @@ async function loadJobs() {
       return;
     }
     if (response.ok) {
-      jobs = await response.json();
+      const data = await response.json();
+      jobs = data.jobs || [];
+      totalJobs = data.total || 0;
+      totalPages = data.total_pages || 1;
       renderTable();
+      renderPagination();
     }
   } catch (error) {
     console.error('加载数据失败:', error);
@@ -125,7 +134,7 @@ function updateStats(stats) {
 function renderTable() {
   const tbody = document.getElementById('job-table-body');
   if (jobs.length === 0) {
-    tbody.innerHTML = '<tr class="empty-row"><td colspan="10" class="empty-message">\u6682\u65E0\u6570\u636E\uFF0C\u70B9\u51FB\u4E0A\u65B9\u201C\u6DFB\u52A0\u62DB\u8058\u4FE1\u606F\u201D\u5F00\u59CB\u8BB0\u5F55</td></tr>';
+    tbody.innerHTML = '<tr class="empty-row"><td colspan="10" class="empty-message">暂无数据，点击上方"添加招聘信息"开始记录</td></tr>';
     return;
   }
 
@@ -146,12 +155,67 @@ function renderTable() {
       <td><span class="source-badge source-${job.source || 'manual'}">${job.source === 'scraper' ? '爬虫' : '手动'}</span></td>
       <td>
         <div class="actions">
-          <button class="btn btn-secondary btn-sm" onclick="openEditModal(${job.id})">\u7F16\u8F91</button>
-          <button class="btn btn-danger btn-sm" onclick="deleteJob(${job.id})">\u5220\u9664</button>
+          <button class="btn btn-secondary btn-sm" onclick="openEditModal(${job.id})">编辑</button>
+          <button class="btn btn-secondary btn-sm" onclick="window.open('/job/${job.id}/interview', '_blank')">面经</button>
+          <button class="btn btn-danger btn-sm" onclick="deleteJob(${job.id})">删除</button>
         </div>
       </td>
     </tr>`;
   }).join('');
+}
+
+// ======== 分页 ========
+function renderPagination() {
+  const paginationDiv = document.getElementById('pagination');
+  if (!paginationDiv) return;
+
+  if (totalPages <= 1) {
+    paginationDiv.innerHTML = '<span class="pagination-info">共 ' + totalJobs + ' 条记录</span>';
+    return;
+  }
+
+  let html = '';
+
+  // 上一页按钮
+  html += `<button ${currentPage === 1 ? 'disabled' : ''} onclick="goToPage(${currentPage - 1})">上一页</button>`;
+
+  // 页码按钮
+  let startPage = Math.max(1, currentPage - 2);
+  let endPage = Math.min(totalPages, currentPage + 2);
+
+  if (startPage > 1) {
+    html += `<button onclick="goToPage(1)">1</button>`;
+    if (startPage > 2) {
+      html += '<span class="pagination-info">...</span>';
+    }
+  }
+
+  for (let i = startPage; i <= endPage; i++) {
+    html += `<button class="${i === currentPage ? 'active' : ''}" onclick="goToPage(${i})">${i}</button>`;
+  }
+
+  if (endPage < totalPages) {
+    if (endPage < totalPages - 1) {
+      html += '<span class="pagination-info">...</span>';
+    }
+    html += `<button onclick="goToPage(${totalPages})">${totalPages}</button>`;
+  }
+
+  // 下一页按钮
+  html += `<button ${currentPage === totalPages ? 'disabled' : ''} onclick="goToPage(${currentPage + 1})">下一页</button>`;
+
+  // 信息
+  let startNum = (currentPage - 1) * 50 + 1;
+  let endNum = Math.min(currentPage * 50, totalJobs);
+  html += `<span class="pagination-info">${startNum}-${endNum} / 共 ${totalJobs} 条</span>`;
+
+  paginationDiv.innerHTML = html;
+}
+
+function goToPage(page) {
+  if (page < 1 || page > totalPages || page === currentPage) return;
+  currentPage = page;
+  loadJobs();
 }
 
 // ======== 添加 ========
@@ -172,12 +236,13 @@ async function handleAddJob(e) {
     if (response.ok) {
       form.reset();
       toggleForm();
+      currentPage = 1;
       loadJobs(); loadStats(); loadCities();
     } else {
-      alert('\u6DFB\u52A0\u5931\u8D25\uFF0C\u8BF7\u91CD\u8BD5');
+      alert('添加失败，请重试');
     }
   } catch (error) {
-    alert('\u6DFB\u52A0\u5931\u8D25\uFF0C\u8BF7\u68C0\u67E5\u7F51\u7EDC');
+    alert('添加失败，请检查网络');
   }
 }
 
@@ -204,7 +269,7 @@ async function openEditModal(jobId) {
       document.getElementById('edit-modal').style.display = 'flex';
     }
   } catch (error) {
-    console.error('\u52A0\u8F7D\u7F16\u8F91\u6570\u636E\u5931\u8D25:', error);
+    console.error('加载编辑数据失败:', error);
   }
 }
 
@@ -228,10 +293,10 @@ async function handleEditJob(e) {
       closeModal();
       loadJobs(); loadStats();
     } else {
-      alert('\u66F4\u65B0\u5931\u8D25\uFF0C\u8BF7\u91CD\u8BD5');
+      alert('更新失败，请重试');
     }
   } catch (error) {
-    alert('\u66F4\u65B0\u5931\u8D25\uFF0C\u8BF7\u68C0\u67E5\u7F51\u7EDC');
+    alert('更新失败，请检查网络');
   }
 }
 
@@ -241,28 +306,29 @@ function closeModal() {
 
 // ======== 删除 ========
 async function deleteJob(jobId) {
-  if (!confirm('\u786E\u5B9A\u8981\u5220\u9664\u8FD9\u6761\u8BB0\u5F55\u5417\uFF1F')) return;
+  if (!confirm('确定要删除这条记录吗？')) return;
   try {
     const response = await fetch(API_BASE + '/api/jobs/' + jobId, { method: 'DELETE' });
     if (response.status === 401) { window.location.href = '/login'; return; }
     if (response.ok) {
       loadJobs(); loadStats();
     } else {
-      alert('\u5220\u9664\u5931\u8D25');
+      alert('删除失败');
     }
   } catch (error) {
-    alert('\u5220\u9664\u5931\u8D25\uFF0C\u8BF7\u68C0\u67E5\u7F51\u7EDC');
+    alert('删除失败，请检查网络');
   }
 }
 
 // ======== 筛选 ========
-function handleFilter() { loadJobs(); }
+function handleFilter() { currentPage = 1; loadJobs(); }
 
 function handleReset() {
   document.getElementById('filter-status').value = '';
   document.getElementById('filter-industry').value = '';
   document.getElementById('filter-city').value = '';
   document.getElementById('filter-keyword').value = '';
+  currentPage = 1;
   loadJobs();
 }
 
@@ -288,7 +354,7 @@ async function handleLogout() {
     await fetch(API_BASE + '/api/logout', { method: 'POST' });
     window.location.href = '/login';
   } catch (error) {
-    console.error('\u767B\u51FA\u5931\u8D25:', error);
+    console.error('登出失败:', error);
   }
 }
 
@@ -400,6 +466,7 @@ function handleImport() {
       .then(function(data) {
         if (data.error) { alert('导入失败: ' + data.error); return; }
         alert('导入成功！新增 ' + data.added + ' 条，跳过重复 ' + data.skipped + ' 条');
+        currentPage = 1;
         loadJobs(); loadStats(); loadCities();
       })
       .catch(function() { alert('导入请求失败'); });
@@ -415,7 +482,7 @@ function handleExport() {
 function startAutoSync() {
   syncInterval = setInterval(function() {
     loadJobs(); loadStats();
-    document.getElementById('last-sync').textContent = '\u521A\u521A\u66F4\u65B0';
+    document.getElementById('last-sync').textContent = '刚刚更新';
   }, 30000);
 }
 
